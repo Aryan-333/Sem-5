@@ -1,22 +1,105 @@
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
-typedef struct token {
+#define MAX_HASH_SIZE 13
+
+struct token {
 	char tokenName[100];
 	int row, col;
 	char type[100];
-}token;
+};
+
+typedef struct node* Nodeptr;
+typedef struct node {
+	char lexemeName[100];
+	char type[20];
+	// int size;
+	char typeofitem[20];
+	char returntype[20];
+	int noargs;
+	Nodeptr next;
+} node;
+
+
+Nodeptr hashSymbol[MAX_HASH_SIZE];
+
+int getHashValue(char lexemeName[100]) {
+	int sum = 0;
+	int i = 0;
+	while(lexemeName[i]) {
+		sum+=(lexemeName[i]*i);
+		i++;
+	}
+	return (sum%MAX_HASH_SIZE);
+}
+
+void displaySymbolTable(){
+	printf("\nSymbol table\n\nLexemeName\tType\tTypeofItem\tReturnType\tNumberOfArgs\n\n");
+	for(int i=0;i<MAX_HASH_SIZE;i++){
+		if(hashSymbol[i] == NULL) {
+			continue;
+		}
+		else{
+			Nodeptr cur = hashSymbol[i];
+			while(cur){
+				printf(" %s\t\t %s\t %s\t\t %s\t\t %d\n",cur->lexemeName, cur->type, cur->typeofitem, cur->returntype, cur->noargs);
+				cur = cur->next;
+			}
+		}
+	}
+}
+
+int searchSymbolTable(char lexemeName[100], char type[20], char typeofitem[20],char returntype[20], int noargs){
+	int index = getHashValue(lexemeName);
+	if(hashSymbol[index] == NULL){
+		return -1;
+	}
+	Nodeptr cur = hashSymbol[index];
+	int i = 0;
+	while(cur != NULL){
+		if(strcmp(lexemeName, cur->lexemeName) == 0)
+		return i;
+		cur = cur->next;
+		i++;
+	}
+	return -1;
+}
+
+void insertSymbolTable(char lexemeName[100], char type[20], char typeofitem[20],char returntype[20],int noargs){
+	if(searchSymbolTable(lexemeName, type, typeofitem, returntype, noargs) == -1){
+		Nodeptr n = (Nodeptr)malloc(sizeof(*n));
+		strcpy(n->lexemeName, lexemeName);
+		n->next = NULL;
+		strcpy(n->type, type);
+		strcpy(n->typeofitem, typeofitem);
+		
+		if(strcmp(lexemeName,"printf")==1||strcmp(lexemeName,"scanf")==1){strcpy(n->returntype,"void");}
+		else strcpy(n->returntype, returntype);
+		n->noargs=noargs;
+		int index = getHashValue(lexemeName);
+		if(hashSymbol[index] == NULL){
+			hashSymbol[index] = n;
+			return;
+		}
+		Nodeptr cur = hashSymbol[index];
+		while(cur->next != NULL)
+			cur = cur->next;
+		cur->next = n;
+	}
+}
+
 
 FILE *fptr;
-char filename[50], buff[50], c;
+char filename[50], buff[50], dbuff[50], c;
 int ind = 0;
 struct token *t;
 int row = 1, col = 1;
-int j;
+int j,count;
+int flag; // for storing the types of variables
+int arrflag = 0,funflag=0;
+int num = 0,count=0;
 
 char keys[32][10] = {"auto", "break", "case", "char", 
 					   "const", "continue", "default", "do", 
@@ -35,19 +118,18 @@ int findSymbol(char ch) {
 	return 0;
 }
 
-
-token* getToken(FILE* fptr) {
-	token* newToken = (struct token*)malloc(sizeof(*newToken));
+struct token* getToken(FILE* fptr) {
+	struct token* newToken = (struct token*)malloc(sizeof(*newToken));
 	ind = 0;
 	c = fgetc(fptr);
-	while(c!=EOF){
-		if(c==EOF) exit(0);
+	loop:
+		if(c==EOF) return NULL;
 		if(c==' ' || c=='\t') {
 			while(c==' ' || c=='\t') {
 				c=fgetc(fptr);
 				col++;
 			}
-			continue;
+			goto loop;
 		}
 		if(c == '\n') {
 			while(c=='\n') {
@@ -55,7 +137,7 @@ token* getToken(FILE* fptr) {
 				c=fgetc(fptr);
 			}
 			col = 1;
-			continue;
+			goto loop;
 		}
 		if(c=='#') {
 			while(c!='\n') {
@@ -65,7 +147,7 @@ token* getToken(FILE* fptr) {
 			row++;
 			col = 1;
 			c = fgetc(fptr);
-			continue;
+			goto loop;
 		}
 		if(c=='/') {
 			c = fgetc(fptr);
@@ -82,6 +164,10 @@ token* getToken(FILE* fptr) {
 			else if(c=='*') {
 				while(1) {
 					while(c!='*') {
+						if(c=='\n') {
+							row++;
+							col = 1;
+						}
 						c = fgetc(fptr);
 						col++;
 					}
@@ -93,7 +179,7 @@ token* getToken(FILE* fptr) {
 				c = fgetc(fptr);
 				col++;
 			}
-			continue;
+			goto loop;
 		}
 		if(isalpha(c)!=0) {
 			newToken->row = row;
@@ -103,23 +189,55 @@ token* getToken(FILE* fptr) {
 				col++;
 				c = fgetc(fptr);
 			}
-			if(c!=EOF) {
-				fseek(fptr, -1, SEEK_CUR);
-			}
-			
+			fseek(fptr, -1, SEEK_CUR);
 			buff[ind]='\0';
 			for(j = 0; j<32; j++) {
 				if(strcmp(buff, keys[j])==0) {
 					strcpy(newToken->tokenName,buff);
 					strcpy(newToken->type,"keyword");
+					if(strcmp(buff, "char")==0 || strcmp(buff, "double")==0 || strcmp(buff, "float")==0 || strcmp(buff, "int")==0 || strcmp(buff, "void")==0) {
+						strcpy(dbuff, buff);
+						flag = 1;
+					}
 					memset(buff, 0, 50);
+					
 					break;
 				}
 			}
-			if(j==32) {
-			    strcpy(newToken->tokenName,"id");
+            if(j==32) {
+				c = fgetc(fptr);
+				//fseek(fptr, -1, SEEK_CUR);
+				
+				if(flag==1) {
+					if(c=='(') {
+						
+						int i=ftell(fptr);
+						c=fgetc(fptr);
+							if(c!=')'&& c!='"'){
+								count=1;
+								while(c!=')'){
+									c=fgetc(fptr);
+									if(c==',') count++;
+								}
+							}
+							else count=0;
+						insertSymbolTable(buff,"-" ,"FUNC", dbuff, count);
+						//memset(dbuff, 0, 50);
+						//strcpy(dbuff,"");
+						fseek(fptr,i,SEEK_SET);
+						}
+						
+					insertSymbolTable(buff, dbuff,"VAR", "-", 0);
+					memset(dbuff, 0, 50);
+                    fseek(fptr, -1, SEEK_CUR);
+				}
+			    strcpy(newToken->tokenName, "id");
 			    strcpy(newToken->type,"identifier");
 				memset(buff, 0, 50);
+				if(c==';' || c=='(') {
+					memset(dbuff, 0, 50);
+					flag = 0;
+				}
 			}
 		}
 		else if(isdigit(c)!=0) {
@@ -130,11 +248,9 @@ token* getToken(FILE* fptr) {
 				col++;
 				c = fgetc(fptr);
 			}
-						if(c!=EOF) {
-				fseek(fptr, -1, SEEK_CUR);
-			}
+			fseek(fptr, -1, SEEK_CUR);
 			buff[ind]='\0';
-			strcpy(newToken->tokenName,buff);
+			strcpy(newToken->tokenName,"buff");
 			strcpy(newToken->type,"NUM");
 			memset(buff, 0, 50);
 		}
@@ -143,7 +259,7 @@ token* getToken(FILE* fptr) {
 			newToken->tokenName[1] = '\0';
 			newToken->row = row;
 			newToken->col = col;
-			strcpy(newToken->type,"Spec symbol");
+			strcpy(newToken->type,"symbol");
 			col++;
 		}
 		else if(c=='"') {
@@ -180,9 +296,7 @@ token* getToken(FILE* fptr) {
 					buff[ind]='\0';
 					strcpy(newToken->tokenName,buff);
 					strcpy(newToken->type,"assignmentop");
-								if(c!=EOF) {
-				fseek(fptr, -1, SEEK_CUR);
-			}
+					fseek(fptr, -1, SEEK_CUR);
 				}
  			}
 			else if(c=='<'||c=='>'||c=='!') {
@@ -200,9 +314,7 @@ token* getToken(FILE* fptr) {
 					strcpy(newToken->tokenName,buff);
 					strcpy(newToken->type,"relop");
 					col--;
-								if(c!=EOF) {
-				fseek(fptr, -1, SEEK_CUR);
-			}
+					fseek(fptr, -1, SEEK_CUR);
 				}
 			}
 			else if(c=='+'||c=='-'||c=='/'||c=='*') {
@@ -228,9 +340,7 @@ token* getToken(FILE* fptr) {
 						buff[ind]='\0';
 						strcpy(newToken->tokenName,buff);
 						strcpy(newToken->type,"arop");
-									if(c!=EOF) {
-				fseek(fptr, -1, SEEK_CUR);
-			}
+						fseek(fptr, -1, SEEK_CUR);
 					}
 				}
 				else if(buff[ind-1]=='*'||buff[ind-1]=='/') {
@@ -245,9 +355,7 @@ token* getToken(FILE* fptr) {
 						strcpy(newToken->tokenName,buff);
 						strcpy(newToken->type,"arop");
 						col--;
-									if(c!=EOF) {
-				fseek(fptr, -1, SEEK_CUR);
-			}
+						fseek(fptr, -1, SEEK_CUR);
 					}
 				}
 			}
@@ -267,26 +375,23 @@ token* getToken(FILE* fptr) {
 					strcpy(newToken->tokenName,buff);
 					strcpy(newToken->type,"logop");
 					col--;
-								if(c!=EOF) {
-				fseek(fptr, -1, SEEK_CUR);
-			}
+					fseek(fptr, -1, SEEK_CUR);
 				}
 				else{
 					buff[ind]='\0';
 					strcpy(newToken->tokenName,buff);
 					strcpy(newToken->type,"bitwiseop");
 					col--;
-								if(c!=EOF) {
-				fseek(fptr, -1, SEEK_CUR);
-			}
+					fseek(fptr, -1, SEEK_CUR);
 				}
 			}
  		}
 		return newToken;
-	}
 }
 
 int main() {
+	for(int i=0; i<MAX_HASH_SIZE; i++)
+		hashSymbol[i] == NULL;
 	printf("Enter the first file to be opened: ");
 	scanf("%s", filename);
 	fptr = fopen(filename, "r");
@@ -296,9 +401,11 @@ int main() {
 	}
 	while(1) {
 		t = getToken(fptr);
-		printf("<%s, %d, %d, %s>\n", t->tokenName, t->row, t->col,t->type);
+		if(!t) break;
+		printf("<%s, %d, %d, %s> \n", t->tokenName, t->row, t->col,t->type);
+		
 	}
+	displaySymbolTable();
 	fclose(fptr);
 	return 0;
 }
-
