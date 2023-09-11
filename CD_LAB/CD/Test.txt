@@ -1,0 +1,22 @@
+#include <stdio.h>
+#include <stdlib.h>
+//hello
+/*meow meow
+dnkn
+nkjrfn
+*/
+int main()
+{
+    //hello
+/*meow meow
+dnkn
+nkjrfn
+*/
+bbbbbbbbbbbbbbb //hello
+/*meow meow
+dnkn
+nkjrfn
+*/
+    "hello //hello /*meow meow*/ mu ##"
+#include <stdlib.h>
+}
